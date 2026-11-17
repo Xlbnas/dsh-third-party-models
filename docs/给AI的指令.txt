@@ -1,0 +1,97 @@
+请帮我给 DeepSeek Harness（简称 DSH）接入第三方 AI 模型的 API。过程每一步告诉我你在做什么，失败就说清楚原因。
+
+【背景】
+DSH 是 DeepSeek 出的桌面版 AI 客户端（macOS app），默认只能用自家模型，但支持接入任何 OpenAI 兼容或 Anthropic 协议的第三方服务商（APIYi、七牛云、OpenRouter、各类中转站等）。
+
+【关键信息】
+- DSH 版本：0.2.2-rc.1
+- 配置文件：~/.dsh/profiles/desktop/cordis.patch.yml
+- 自定义模型插件：@deepseek-ai/dsh-llm-pi-ai（DSH 自带，不用装）
+
+【先问我这三个问题】
+1. 服务商的接口地址（Base URL）是什么？
+2. 密钥是什么？
+3. 服务商说的是 OpenAI 兼容，还是 Anthropic 协议？
+
+【方式 A：图形界面（优先，最简单）】
+1. DSH 左下角齿轮 → 设置
+2. 左边选「模型」
+3. 点底部「+ 添加模型提供商」
+4. 填：Provider ID（小写英文，不能改）、Display name、Base URL、API protocol、API Key
+5. 点「Fetch available models」拉模型列表
+6. 勾选模型 → 保存 → ⌘Q 完全退出 DSH → 重开
+
+如果界面里没有「添加模型提供商」按钮，改用方式 B。
+
+【方式 B：改配置文件】
+第一步，备份：
+cp ~/.dsh/profiles/desktop/cordis.patch.yml ~/.dsh/profiles/desktop/cordis.patch.yml.bak-$(date +%Y%m%d-%H%M%S)
+
+第二步，在 cordis.patch.yml 文件末尾追加（缩进用空格不用 Tab，最外层 - 要顶格）：
+
+- insert:
+    - id: llm-pi-ai
+      name: "@deepseek-ai/dsh-llm-pi-ai"
+      config:
+        providers:
+          你的providerID:
+            displayName: "显示名"
+            api: openai-completions
+            baseURL: "https://服务商地址/v1"
+            headers:
+              Authorization: "Bearer 你的密钥"
+            models:
+              - id: 模型ID
+                name: "模型显示名"
+                contextWindow: 200000
+                maxTokens: 64000
+                input: ["text", "image"]
+
+**最关键的坑**：每个 model 都必须有 input: ["text", "image"] 这一行。漏了模型就读不了图，会报 does not declare image input。
+
+如果是 Anthropic 原生协议的服务商，把 api 和 headers 换成：
+            api: anthropic-messages
+            baseURL: "https://服务商地址"
+            headers:
+              x-api-key: "你的密钥"
+              anthropic-version: "2023-06-01"
+
+第三步，⌘Q 完全退出 DSH 再重开（配置只在启动时读取，关窗口不算）。
+
+【重启后陪我验证这 5 项】
+1. DSH 能正常启动，没白屏没闪退
+2. 设置 > 模型 里能看到新加的 provider
+3. 对话顶部模型列表里能选到新模型
+4. 选一个模型随便问一句，能回复
+5. 发张图片给它，能描述出内容（模型支持看图的话）
+
+【补充：顺便把网页抓取改成免费】
+配置文件里找到 - id: web 那段，把 fetchProvider 改成 http：
+    searchProvider: deepseek-search-api
+    fetchProvider: http
+
+【补充：网页搜索要单独配密钥】
+搜索走的是 DeepSeek 付费服务，需要 DEEPSEEK_API_KEY（和模型服务商的密钥不是一回事）。在 DSH 的「设置 > 内置插件 > 网页搜索与获取」里填。
+
+【出问题怎么回滚】
+配置文件备份在 ~/.dsh/profiles/desktop/cordis.patch.yml.bak-*，恢复命令：
+cp ~/.dsh/profiles/desktop/cordis.patch.yml.bak-<时间戳> ~/.dsh/profiles/desktop/cordis.patch.yml
+然后重开 DSH。
+
+【常见报错对照】
+401/Unauthorized → 密钥错了，重新复制（注意别带空格）
+404/not found → Base URL 错了，OpenAI 兼容的要带 /v1
+model not found → 模型 ID 拼错
+does not declare image input → 漏了 input 声明
+MISSING_CREDENTIAL → 没找到密钥，检查 headers
+超时 → 网络问题，先确认浏览器能打开服务商网址
+
+【参考参数（以服务商实际给的为准）】
+APIYi Claude：https://api.apiyi.com  + anthropic-messages
+APIYi Gemini：https://api.apiyi.com/v1 + openai-completions
+七牛云：https://api.qnaigc.com/v1 + openai-completions
+StepFun：https://api.stepfun.com/step_plan/v1 + openai-completions
+OpenRouter：https://openrouter.ai/api/v1 + openai-completions
+Ollama 本地：http://localhost:11434/v1 + openai-completions
+
+现在开始，先问我那三个问题。
